@@ -8,5 +8,5 @@ acquireMulRecAvgRSOM_50MHz.m
     does a scan with the set parameters, and process and reconstruct the image after scan
     
 show_data_Quick_2019.m
-    reconstruct the raw scan data in folder Data
+    reconstruct the raw scan data in folder Data (DOI https://doi.org/10.5281/zenodo.4630738)
     
