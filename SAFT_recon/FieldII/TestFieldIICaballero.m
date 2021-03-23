@@ -1,0 +1,143 @@
+% Example from http://www.egr.msu.edu/~fultras-web/files/documentation/Field-to-FOCUS.pdf
+%% Start Field II and set initial parameters
+addpath('D:\Users\mathias.schwarz\Documents\MATLAB\FieldII\Field_II_PC7')
+addpath('D:\Users\mathias.schwarz\Documents\MATLAB\FieldII\usefullFunctions')
+cd D:\Users\mathias.schwarz\Documents\MATLAB\FieldII
+
+%% Define Transducer geometry
+clearvars -except a Fs c maxPixels
+clc
+
+nel = 1;    % number of elements
+width = 1.88*1e-3;   % width of element
+height = 15*1e-3;     % height of element
+
+kerf = 1e-3
+Rcurve = 40*1e-3;   % radius of element curvature
+
+elemres=0.1e-3; % element discretisation resolution
+
+Nx = width/elemres; 
+Ny = height/elemres;
+fcs = [0 0 0];  % focus position
+
+field_init(0);
+Th = xdc_focused_array(nel,width,height,kerf,Rcurve,Nx,Ny,fcs);
+figure(1), [x_pos,y_pos,z_pos] = show_xdc_MS(Th, kerf, width, height)
+%hold on, scatter3(x_pos,y_pos,z_pos)
+title('Geometry 128 element linear array - single element','FontSize',16)
+daspect([1 1 1]);
+%saveas(gcf,sprintf('Images/Geometry128ElementLinearArray.png'),'png')
+
+LCOF=2e6;
+UCOF=10e6;
+
+
+%
+
+% Now we need to define the simulation grid for field calculations. y = 0 for XZ plane.
+xmin = -20e-3; %0;
+xmax = 20e-3; %0;
+ymin = -20e-3;
+ymax = 20e-3;
+zmin = 20e-3;
+zmax = 60e-3;
+zpoints = 100;
+xpoints = 100; %1;
+ypoints = 100;
+dx = (xmax-xmin)/xpoints;
+dy = (ymax-ymin)/ypoints;
+dz = (zmax-zmin)/zpoints;
+x = xmin:dx:xmax;
+y = ymin:dy:ymax;
+z = zmin:dz:zmax;
+
+% Now we need to set the sampling frequency, the medium sound speed
+% and the excitation signal of the apertures.
+Fs=1250e6;
+Ts = 1/Fs; % Sampling period
+c=1520;
+set_sampling(Fs);
+set_field('c',c);
+set_field('use_att',0)
+
+f0=8e6;
+t = 0:Ts:2030/Fs;
+%a = 20e-6; % radius of emitting  sphere
+%tau = c/a*(t-(max(t)/2-a/c));
+%excitation=a*(1-tau).*heaviside(1-abs(tau-1));
+excitation=sin(2*pi*f0*t);
+
+% Set the impulse response and excitation of the emit aperture
+% impulse_response=sin(2*pi*f0*(0:1/fs:2/f0));
+% impulse_response=impulse_response.*hanning(max(size(impulse_response)))';
+% xdc_impulse (Th, impulse_response);
+% xdc_impulse (Th2, impulse_response);
+xdc_excitation (Th, excitation);
+
+% The next step is to initialize the vectors, run the calc_hp function
+% and display the resulting pressure field.
+tic;
+point = [0 0 0];
+t1 = zeros(length(x),length(y),length(z)); % Start time for Thrture 1 pressure signal
+P1n = t1; % Norm of pressure from Thrture 1
+for nx = 1:length(x)
+    clc; disp([ nx length(x)]);
+    for ny = 1:length(y)
+        for nz = 1:length(z)
+            point(1)=x(nx);
+            point(2)=y(ny);
+            point(3)=z(nz);
+            [p1,t1(nx,ny,nz)] = calc_hp(Th,point);
+            P1Filt = myfilter(p1, [LCOF UCOF],Fs );  %% filtering to desired freqeucny band
+            MaxSig(nx,ny,nz) = max(P1Filt(:));
+            %MaxSig(nx,ny,nz) = max(p1(:));
+            %MaxSig(nx,ny,n3) = norm(p1);
+            %plot(p1);
+            %pause(0.2)
+            %P1nFilt = myfilter(P1n, [LCOF UCOF],fs );  %% filtering to desired freqeucny band
+        end
+    end
+end
+field_end;
+
+%for ix=1:length(x)
+ix=round(length(x)/2);
+    set(gca,'FontSize',14)
+    figure(2);
+    YZMat=squeeze(MaxSig(ix,:,:));
+    imagesc(z*1000,y*1000,YZMat)
+    title(['Maximal signal at x = ' num2str(x(ix)*1000) ' mm for frequency f0 = ' num2str(f0) 'micron'],'FontSize',16);
+    colormap('jet')
+    colorbar('FontSize',16)
+    xlabel('z (mm)','FontSize',16);
+    ylabel('y (mm)','FontSize',16);
+    xlim([zmin*1000 zmax*1000])
+    ylim([ymin*1000 ymax*1000])
+    daspect([1 1 1])
+    saveas(gcf,sprintf('Images/YZPlaneFiltered_Fs_%1.2e_c_%d_f0_%5.5f.png',Fs,c,f0),'png')
+    %pause(0.2)
+%end
+
+%for iy=1:length(y)
+iy=round(length(y)/2);
+    set(gca,'FontSize',14)
+    figure(3);
+    XZMat=squeeze(MaxSig(:,iy,:));
+    imagesc(z*1000,x*1000,XZMat)
+    title(['Maximal signal at y = ' num2str(y(iy)*1000) ' mm for frequency f0 = ' num2str(f0) 'micron'],'FontSize',16);
+    colorbar;
+    xlabel('z (mm)','FontSize',16);
+    ylabel('x (mm)','FontSize',16);
+    xlim([zmin*1000 zmax*1000])
+    ylim([xmin*1000 xmax*1000])
+    daspect([1 1 1])
+    saveas(gcf,sprintf('Images/XZPlaneFiltered_Fs_%1.2e_c_%d_f0_%5.5f.png',Fs,c,f0),'png')
+    %pause(0.2)
+%end
+
+% save data
+save(sprintf('Images/SensitivityFieldCaballeroFiltered_Fs_%1.2e_c_%d_f0_%5.5f.mat',Fs,c,f0),'MaxSig','c','Fs','f0','x','y','z')
+
+
+toc;
